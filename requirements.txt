@@ -1,0 +1,3 @@
+Jinja2~=2.11.3
+selenium~=3.141.0
+msedge-selenium-tools~=3.141.3
