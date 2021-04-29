@@ -1,10 +1,17 @@
 ![whapbot_logo](https://raw.githubusercontent.com/saizk/pywhapbot/master/images/whapbot.png)
 ![PyPI version](https://img.shields.io/pypi/v/pywhapbot)
 
+WhatsApp Web API Wrapper for Chrome, Firefox, Opera, Brave and Edge.
+
 ## Installation
 ```Python
 pip install pywhapbot
 ```
+
+## Features
++ Send messages by phone number
++ Store WhatsApp Web sessions in all the browsers. (Edge only available on Windows)
++ Automate the download of Selenium drivers
 
 ## Simple Usage
 ```Python
@@ -18,16 +25,17 @@ bot.quit()
 ## Download specific drivers automatically
 ```Python
 from pywhapbot.install import download_driver
+from pywhapbot.utils import get_version
+
 download_driver("firefox", version="0.29.1", root="drivers")
 download_driver("opera", version="latest")
 download_driver("edge", version="current")
-```
 
-## Get versions
-```Python
-from pywhapbot.utils import get_version
 lversion = get_version("brave", "latest")
 cversion = get_version("brave", "current")
+
+if cversion < lversion:
+    print("You should update your browser to the last version")
 ```
 
 ## More advanced example
@@ -59,3 +67,12 @@ with whapbot as bot:  # Context manager of selenium webdriver class
 
 # bot.quit() called by the context manager
 ```
+
+## Contribute
+Would you like to contribute to this project? Here are a few starters:
+- Improve documentation
+- Add Testing examples
+- Bug hunts and refactor
+- Additional features/ More integrations
+- Phantom JS support
+- Implement default browser functions for Mac 
