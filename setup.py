@@ -7,16 +7,16 @@ with open("requirements.txt", "r", encoding="utf-8") as req:
     requirements = req.read().splitlines()
 
 setup(
-    name="pyWhapBot",  # Replace with your own username
+    name="pywhapbot",  # Replace with your own username
     version="1.0.0",
     author="saizk",
     author_email="sergioaizcorbe@hotmail.com",
     description="WhatsApp Web API Wrapper for Chrome, Firefox, Opera, Brave and Edge.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/saizk/pyWhapBot",
+    url="https://github.com/saizk/pywhapbot",
     project_urls={
-        "Bug Tracker": "https://github.com/saizk/pyWhapBot/issues",
+        "Bug Tracker": "https://github.com/saizk/pywhapbot/issues",
     },
     classifiers=[
         "Programming Language :: Python :: 3",

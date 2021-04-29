@@ -1,5 +1,5 @@
 ![whapbot_logo](images/whapbot.png?raw=true)
-![PyPI version]
+![PyPI version](https://img.shields.io/pypi/v/pywhapbot)]
 
 ## Installation
 ```Python
@@ -34,12 +34,13 @@ cversion = get_version("brave", "current")
 ```Python
 from pywhapbot import WhapBot
 
-whapbot = WhapBot(browser="firefox",
-                  driver_path="geckodriver.exe",
-                  profile_path="profiles/firefox-profile",
-                  proxy="169.210.345.10:4567",
-                  kiosk=True)  # kiosk mode (not supported on opera)
-
+whapbot = WhapBot(
+    browser="firefox",
+    driver_path="geckodriver.exe",
+    profile_path="profiles/firefox-profile",
+    proxy="169.210.345.10:4567",
+    kiosk=True  # kiosk mode (not supported on opera)
+)
 whapmsgs = [("+34696969420", "Open!"),
             ("+34696942069", "Sourcerer!")]
 
