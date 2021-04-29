@@ -1,5 +1,5 @@
-![whapbot_logo](https://raw.githubusercontent.com/saizk/pywhapbot/master/images/whapbot.png?raw=true)
-![PyPI version](https://img.shields.io/pypi/v/pywhapbot)]
+![whapbot_logo](https://raw.githubusercontent.com/saizk/pywhapbot/master/images/whapbot.png)
+![PyPI version](https://img.shields.io/pypi/v/pywhapbot)
 
 ## Installation
 ```Python
