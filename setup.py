@@ -28,6 +28,6 @@ setup(
     ],
     install_requires=requirements,
     package_dir={"": "pywhapbot"},
-    packages=find_packages(where="pywhapbot"),
+    packages=["pywhapbot"],
     python_requires=">=3.6",
 )
