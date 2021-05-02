@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
@@ -27,7 +27,8 @@ setup(
         "Operating System :: OS Independent",
     ],
     install_requires=requirements,
-    package_dir={"": "pywhapbot"},
+    package_dir={".": ""},
     packages=["pywhapbot"],
+    include_package_data=True,
     python_requires=">=3.6",
 )
