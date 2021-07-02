@@ -14,7 +14,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver import Chrome, Firefox, Opera, Remote
 from msedge.selenium_tools import Edge
 
-
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, \
                                        ElementNotInteractableException, UnexpectedAlertPresentException, \
@@ -31,10 +30,15 @@ BRAVE_PATHS = {
 class WhapBot(object):
     _URL = "https://web.whatsapp.com/"
     _LOCAL_STORAGE = "whatsapp_cookies.json"
-    _SELECTORS = {
+    XPATH_SELECTORS = {
+        "send_button": '//*[@id="main"]/footer/div[1]/div[3]/button',
+        "all_messages": '//*[@role="region"]',
+        "last_message": '//*[@role="region"]/div[last()]',
+        "message_check": '//*[@role="region"]/div[last()]/div/div/div/div[2]/div/div/span'
+    }
+    CSS_SELECTORS = {
         "main_page": '.two',
         "qr_code": 'canvas',
-        "send_button": '//*[@id="main"]/footer/div[1]/div[3]/button',
         "chat_bar": 'div.input',
         "qr_reloader": 'div[data-ref] > span > div'
     }
@@ -49,27 +53,27 @@ class WhapBot(object):
         self.proxy = proxy
         self.command_executor = command_executor
 
-        self._logged = False
-
         if not driver_path:
             from .install import download_driver
             from .utils import search_driver
             download_driver(self.browser)
             driver_path = search_driver(browser=self.browser)
+
         self._driver_path = Path(driver_path).absolute()
         if not self._driver_path.exists():
             raise RuntimeError("Driver path does not exist")
 
         if not profile_path:
-            profile_path = Path(f"{self._driver_path.parent}/{self.browser}-profile")
+            profile_path = Path(f"{self._driver_path.parent}/{self.browser}-profile").absolute()
         self._profile_path = Path(profile_path).absolute()
 
         self._whatsapp_cookies = Path(f"{self._profile_path}/{self._LOCAL_STORAGE}")
+        self._logged = True if self._whatsapp_cookies.exists() else False
 
         try:
             self._driver = self._create_selenium_driver()
-        except OSError:
-            raise RuntimeError(f"Incorrect executable path for {self.browser} driver")
+        except OSError as e:
+            raise RuntimeError(f"Incorrect executable path for {self.browser} driver: {e}")
         except SessionNotCreatedException:
             raise RuntimeError(f"Cannot create {self.browser} process with the current driver.\n"
                                f"Update your browser to the latest version or download the specific driver")
@@ -212,6 +216,9 @@ class WhapBot(object):
                 else:
                     shutil.copy2(src, dst)
 
+        self.save_local_storage()
+
+    def save_local_storage(self):
         with open(self._whatsapp_cookies, "w+") as f:
             f.write(json.dumps(self.driver.execute_script("return window.localStorage;")))  # get local storage
 
@@ -227,8 +234,8 @@ class WhapBot(object):
         while not self.is_logged:
             try:
                 WebDriverWait(self.driver, timeout).until(EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, self.select_by("main_page", "qr_code"))))
-                self.driver.find_element_by_css_selector(self.select_by("main_page"))
+                    (By.CSS_SELECTOR, f'{self.CSS_SELECTORS["main_page"]}, {self.CSS_SELECTORS["qr_code"]}')))
+                self.driver.find_element_by_css_selector(self.CSS_SELECTORS["main_page"])
                 self._logged = True
             except NoSuchElementException:
                 self._logged = False
@@ -237,37 +244,70 @@ class WhapBot(object):
                     raise RuntimeError("Number of retries exceeded")
                 self.retry(self.log, url, retries=retries - 1)
 
-        if self.browser == "firefox":  # and not self._profile_path.exists():
-            self.save_profile()
+        # if self.browser == "firefox":  # and not self._profile_path.exists():
+        self.save_profile()
+        self.save_local_storage()
 
-    def send(self, phone, message, timeout=15, retries=0):
-        url = f"{self._URL}send?phone={phone}&text={quote(message)}"
+    def send(self, phone, message, timeout=15, retries=5):
         if not self.is_logged:
             self.log()
         try:
-            self.get(url)
-            send_button = WebDriverWait(self.driver, timeout).until(
-                EC.element_to_be_clickable((By.XPATH, self.select_by("send_button"))))  # presence_of_element_located
-            time.sleep(.5)
-            send_button.click()
-            time.sleep(1.5)  # Used to avoid most of the exceptions
+            self.get(url=f"{self._URL}send?phone={phone}&text={quote(message)}")
+            send_button = WebDriverWait(self.driver, timeout).until(  # presence_of_element_located
+                EC.element_to_be_clickable((By.XPATH, self.XPATH_SELECTORS["send_button"]))).click()
+            while not self.check_message_is_sent():
+                time.sleep(1)  # Used to avoid most of the exceptions
         except (ElementNotInteractableException, UnexpectedAlertPresentException, TimeoutException) as e:
             if retries == 0:
                 raise RuntimeError("Number of retries exceeded")
             self.retry(self.send, phone, message, retries=retries - 1)
 
+    def open_chat_by_phone(self, phone, retries=5):
+        if not self.is_logged:
+            self.log()
+        self.get(url=f"{self._URL}send?phone={phone}")
+        try:
+            WebDriverWait(self.driver, 20).until(
+                EC.visibility_of_element_located((By.XPATH, self.XPATH_SELECTORS["all_messages"]))
+            )
+        except TimeoutException as e:
+            if retries == 0:
+                raise RuntimeError(f"Number of retries exceeded: {e}")
+            self.retry(self.open_chat_by_phone, phone, retries - 1)
+
+    def get_last_message(self, phone, retries=5):
+        self.open_chat_by_phone(phone)
+        try:
+            last_msg = self.driver.find_element_by_xpath(self.XPATH_SELECTORS["last_message"])
+            return last_msg.text
+
+        except NoSuchElementException as e:
+            if retries == 0:
+                raise RuntimeError(f"Number of retries exceeded: {e}")
+            self.retry(self.get_last_message, phone, retries - 1)
+
+    def get_last_message_status(self, retries=5):
+        try:
+            last_msg = self.driver.find_element_by_xpath(f'{self.XPATH_SELECTORS["message_check"]}')
+            return last_msg.get_attribute("aria-label").strip()
+        except NoSuchElementException as e:
+            if retries == 0:
+                raise RuntimeError(f"Cannot get last message status: {e}")
+            self.retry(self.check_message_is_sent, retries - 1)
+
+    def check_message_is_sent(self):
+        return True if self.get_last_message_status() != "Pendiente" else False
+
     @staticmethod
     def retry(func, *args, **kwargs):
+        time.sleep(.5)
         func(*args, **kwargs)
 
-    def add_selectors(self, selectors: dict):
-        self._SELECTORS.update(selectors)
+    def add_css_selectors(self, selectors: dict):
+        self.CSS_SELECTORS.update(selectors)
 
-    def select_by(self, *selectors: str):
-        try:
-            return ",".join([self._SELECTORS[sel] for sel in selectors])
-        except KeyError:
-            raise RuntimeError("Unknown selector. If you want to add custom selectors use add_selectors()")
+    def add_xpath_selectors(self, selectors: dict):
+        self.XPATH_SELECTORS.update(selectors)
 
     def maximize_window(self):
         self.driver.maximize_window()
@@ -276,7 +316,7 @@ class WhapBot(object):
         self.driver.refresh()
 
     def reload_qr(self):
-        self.driver.find_element_by_css_selector(self.select_by("qr_reloader")).click()
+        self.driver.find_element_by_css_selector(self.CSS_SELECTORS["qr_reloader"]).click()
 
     def close(self):
         self.driver.close()

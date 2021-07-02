@@ -8,7 +8,7 @@ with open("requirements.txt", "r", encoding="utf-8") as req:
 
 setup(
     name="pywhapbot",  # Replace with your own username
-    version="1.0.0",
+    version="1.0.2",
     author="saizk",
     author_email="sergioaizcorbe@hotmail.com",
     description="WhatsApp Web API Wrapper for Chrome, Firefox, Opera, Brave and Edge.",

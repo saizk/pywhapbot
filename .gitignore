@@ -134,3 +134,4 @@ dmypy.json
 *.csv
 *.psd
 *.pypirc
+test.py
