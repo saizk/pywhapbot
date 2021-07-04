@@ -9,13 +9,14 @@ pip install pywhapbot
 ```
 
 ## Features
++ Automate the download of Selenium drivers
 + Send messages by phone number
 + Store WhatsApp Web sessions in all the browsers. (Edge only available on Windows)
-+ Automate the download of Selenium drivers
 
 ## Simple Usage
 ```Python
 from pywhapbot import WhapBot
+
 bot = WhapBot("chrome")  # downloads current driver automatically
 bot.log()  # optional
 bot.send("+34123456789", "Hello world!")  # forces log
@@ -35,37 +36,42 @@ lversion = get_version("brave", "latest")
 cversion = get_version("brave", "current")
 
 if cversion < lversion:
-    print("You should update your browser to the last version")
+    print("You should update your browser!")
 ```
 
 ## More advanced example
 ```Python
+import time
 from pywhapbot import WhapBot
 
 whapbot = WhapBot(
     browser="firefox",
-    driver_path="geckodriver.exe",
+    driver_path="drivers/geckodriver.exe",
     profile_path="profiles/firefox-profile",
     proxy="169.210.345.10:4567",
     kiosk=True  # kiosk mode (not supported on opera)
 )
 whapmsgs = [("+34696969420", "Open!"),
-            ("+34696942069", "Sourcerer!")]
+            ("+34696942069", "Source!")]
 
-with whapbot as bot:  # Context manager of selenium webdriver class
+with whapbot as bot:
     bot.get("https://github.com/saizk")
     # Selenium Webdriver command examples
     bot.driver.set_window_position(210, 210)
-    assert len(bot.driver.window_handles) == 1 
     bot.driver.find_element_by_link_text("new window").click()
     bot.driver.switch_to.new_window('tab')
     
     for idx, (phone, message) in enumerate(whapmsgs):
         bot.send(phone, message, timeout=15, retries=5)  # forces log
         bot.screenshot(f"whapbot-{idx}.png")
-        print(f"{idx+1}/{len(whapmsgs)} messages sent")    
-
-# bot.quit() called by the context manager
+        print(f"{idx+1}/{len(whapmsgs)} messages sent")   
+    
+    time.sleep(120)
+    
+    for phone, message in whapmsgs:
+        bot.open_chat_by_phone(phone)
+        if bot.get_last_message_status() not in ["Read", "Leido"]:
+            bot.send(message)
 ```
 
 ## Contribute

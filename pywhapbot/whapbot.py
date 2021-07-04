@@ -57,10 +57,7 @@ class WhapBot(object):
             from .utils import search_driver
             download_driver(self.browser)
             driver_path = search_driver(browser=self.browser)
-
         self._driver_path = Path(driver_path).absolute()
-        if not self._driver_path.exists():
-            raise RuntimeError("Driver path does not exist")
 
         if not profile_path:
             profile_path = Path(f"{self._driver_path.parent}/{self.browser}-profile").absolute()
@@ -69,8 +66,13 @@ class WhapBot(object):
         self._whatsapp_cookies = Path(f"{self._profile_path}/{self._LOCAL_STORAGE}")
         self._logged = True if self._whatsapp_cookies.exists() else False
 
+        if brave_path:
+            self.brave_path = Path(brave_path).absolute()
+        else:
+            self.brave_path = self._BRAVE_PATHS[platform]
+
         try:
-            self._options = self._create_options(brave_path)
+            self._options = self._create_options()
             self._driver = self._create_selenium_driver()
         except OSError as e:
             raise RuntimeError(f"Incorrect executable path for {self.browser} driver: {e}")
@@ -146,16 +148,13 @@ class WhapBot(object):
         # self.maximize_window()
         return driver
 
-    def _create_options(self, brave_path):
+    def _create_options(self):
 
         if self.browser in ["chrome", "brave"]:
             from selenium.webdriver.chrome.options import Options as ChromeOptions
             options = ChromeOptions()
             if self.browser == "brave":
-                if brave_path:
-                    options.binary_location = brave_path
-                else:
-                    options.binary_location = self._BRAVE_PATHS[platform]
+                options.binary_location = self.brave_path
 
         elif self.browser == "firefox":
             from selenium.webdriver.firefox.options import Options as FirefoxOptions
@@ -257,7 +256,7 @@ class WhapBot(object):
                 self._logged = False
             except (UnexpectedAlertPresentException, TimeoutException) as e:
                 if retries == 0:
-                    raise RuntimeError("Number of retries exceeded")
+                    raise RuntimeError(f"Number of retries exceeded: {e}")
                 self.retry(self.log, url, retries=retries - 1)
 
         self.save_profile()
@@ -270,17 +269,17 @@ class WhapBot(object):
             send_button = WebDriverWait(self.driver, timeout).until(  # presence_of_element_located
                 EC.element_to_be_clickable((By.XPATH, self.XPATH_SELECTORS["send_button"]))).click()
             while not self.check_message_is_sent():
-                time.sleep(1)  # Used to avoid most of the exceptions
+                time.sleep(.5)  # Used to avoid most of the exceptions
         except (ElementNotInteractableException, UnexpectedAlertPresentException, TimeoutException) as e:
             if retries == 0:
-                raise RuntimeError("Number of retries exceeded")
+                raise RuntimeError(f"Number of retries exceeded: {e}")
             self.retry(self.send, phone, message, retries=retries - 1)
 
     @login_required
-    def open_chat_by_phone(self, phone, retries=5):
+    def open_chat_by_phone(self, phone, timeout=20, retries=5):
         self.get(url=f"{self._URL}send?phone={phone}")
         try:
-            WebDriverWait(self.driver, 20).until(
+            WebDriverWait(self.driver, timeout).until(
                 EC.visibility_of_element_located((By.XPATH, self.XPATH_SELECTORS["all_messages"]))
             )
         except TimeoutException as e:
@@ -292,8 +291,7 @@ class WhapBot(object):
     def get_last_message(self, phone, retries=5):
         self.open_chat_by_phone(phone)
         try:
-            last_msg = self.driver.find_element_by_xpath(self.XPATH_SELECTORS["last_message"])
-            return last_msg.text
+            return self.driver.find_element_by_xpath(self.XPATH_SELECTORS["last_message"]).text
 
         except NoSuchElementException as e:
             if retries == 0:
@@ -304,7 +302,9 @@ class WhapBot(object):
     def get_last_message_status(self, retries=5):
         try:
             last_msg = self.driver.find_element_by_xpath(f'{self.XPATH_SELECTORS["message_check"]}')
-            return last_msg.get_attribute("aria-label").strip()
+            status = last_msg.get_attribute("aria-label").strip()
+            return status
+
         except NoSuchElementException as e:
             if retries == 0:
                 raise RuntimeError(f"Cannot get last message status: {e}")
