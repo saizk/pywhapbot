@@ -3,11 +3,8 @@ from setuptools import setup
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-with open("requirements.txt", "r", encoding="utf-8") as req:
-    requirements = req.read().splitlines()
-
 setup(
-    name="pywhapbot",  # Replace with your own username
+    name="pywhapbot",
     version="1.0.2",
     author="saizk",
     author_email="sergioaizcorbe@hotmail.com",
@@ -26,7 +23,7 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    install_requires=requirements,
+    install_requires=['selenium~=3.141.0', 'msedge-selenium-tools~=3.141.3'],
     package_dir={".": ""},
     packages=["pywhapbot"],
     include_package_data=True,

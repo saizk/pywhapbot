@@ -20,12 +20,6 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException,
                                        WebDriverException, SessionNotCreatedException, \
                                        NoSuchWindowException, InvalidSessionIdException
 
-BRAVE_PATHS = {
-    "win32": "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe",
-    "linux": "/opt/brave.com/brave/brave-browser",
-    "darwin": "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
-}
-
 
 class WhapBot(object):
     _URL = "https://web.whatsapp.com/"
@@ -42,8 +36,13 @@ class WhapBot(object):
         "chat_bar": 'div.input',
         "qr_reloader": 'div[data-ref] > span > div'
     }
+    _BRAVE_PATHS = {
+        "win32": "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe",
+        "linux": "/opt/brave.com/brave/brave-browser",
+        "darwin": "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+    }
 
-    def __init__(self, browser: str, driver_path: str = "", profile_path: str = "",
+    def __init__(self, browser: str, driver_path: str = "", profile_path: str = "", brave_path: str = "",
                  headless: bool = False, kiosk: bool = False, proxy: str = None, command_executor: str = None):
 
         self.browser = browser.lower()
@@ -71,6 +70,7 @@ class WhapBot(object):
         self._logged = True if self._whatsapp_cookies.exists() else False
 
         try:
+            self._options = self._create_options(brave_path)
             self._driver = self._create_selenium_driver()
         except OSError as e:
             raise RuntimeError(f"Incorrect executable path for {self.browser} driver: {e}")
@@ -85,10 +85,6 @@ class WhapBot(object):
         self.quit()
 
     @property
-    def is_logged(self):
-        return self._logged
-
-    @property
     def driver(self):
         return self._driver
 
@@ -96,20 +92,39 @@ class WhapBot(object):
     def driver(self, driver):
         self._driver = driver
 
+    @property
+    def options(self):
+        return self._options
+
+    @options.setter
+    def options(self, options):
+        self._options = options
+
+    @property
+    def is_logged(self):
+        return self._logged
+
+    def login_required(func):
+        def logged_checker(self, *args, **kwargs):
+            if not self.is_logged:
+                self.log()
+            return func(self, *args, **kwargs)
+
+        return logged_checker
+
     def _create_selenium_driver(self):
-        options = self._create_options()
 
         if self.command_executor:  # remote driver
-            driver = Remote(command_executor=self.command_executor, options=options)
+            driver = Remote(command_executor=self.command_executor, options=self._options)
 
         elif self.browser in ["chrome", "brave"]:
-            driver = Chrome(executable_path=self._driver_path, options=options)
+            driver = Chrome(executable_path=self._driver_path, options=self._options)
 
         elif self.browser == "opera":
-            driver = Opera(executable_path=self._driver_path, options=options)
+            driver = Opera(executable_path=self._driver_path, options=self._options)
 
         elif self.browser == "edge":
-            driver = Edge(executable_path=self._driver_path, options=options)
+            driver = Edge(executable_path=self._driver_path, options=self._options)
 
         elif self.browser == "firefox":
             from selenium.webdriver.firefox.options import FirefoxProfile
@@ -121,7 +136,7 @@ class WhapBot(object):
 
             driver = Firefox(
                 executable_path=self._driver_path,
-                options=options,
+                options=self._options,
                 firefox_profile=profile,
                 service_log_path=Path(f"{self._driver_path.parent}/geckodriver.log")
             )
@@ -131,17 +146,21 @@ class WhapBot(object):
         # self.maximize_window()
         return driver
 
-    def _create_options(self):
+    def _create_options(self, brave_path):
 
         if self.browser in ["chrome", "brave"]:
             from selenium.webdriver.chrome.options import Options as ChromeOptions
             options = ChromeOptions()
             if self.browser == "brave":
-                options.binary_location = BRAVE_PATHS[platform]
+                if brave_path:
+                    options.binary_location = brave_path
+                else:
+                    options.binary_location = self._BRAVE_PATHS[platform]
 
         elif self.browser == "firefox":
             from selenium.webdriver.firefox.options import Options as FirefoxOptions
             options = FirefoxOptions()
+            options.set_preference('dom.webnotifications.enabled', False)
 
         elif self.browser == "opera":
             from selenium.webdriver.opera.options import Options as OperaOptions
@@ -157,9 +176,8 @@ class WhapBot(object):
         options.headless = self.headless
         if self.kiosk:  # not supported on opera driver
             options.add_argument("--kiosk")
-        if self.browser == "firefox":
-            options.set_preference('dom.webnotifications.enabled', False)
-        else:
+
+        if self.browser != "firefox":
             options.add_argument(f"user-data-dir={self._profile_path}")
             options.add_argument("--disable-notifications")
 
@@ -216,8 +234,6 @@ class WhapBot(object):
                 else:
                     shutil.copy2(src, dst)
 
-        self.save_local_storage()
-
     def save_local_storage(self):
         with open(self._whatsapp_cookies, "w+") as f:
             f.write(json.dumps(self.driver.execute_script("return window.localStorage;")))  # get local storage
@@ -244,13 +260,11 @@ class WhapBot(object):
                     raise RuntimeError("Number of retries exceeded")
                 self.retry(self.log, url, retries=retries - 1)
 
-        # if self.browser == "firefox":  # and not self._profile_path.exists():
         self.save_profile()
         self.save_local_storage()
 
+    @login_required
     def send(self, phone, message, timeout=15, retries=5):
-        if not self.is_logged:
-            self.log()
         try:
             self.get(url=f"{self._URL}send?phone={phone}&text={quote(message)}")
             send_button = WebDriverWait(self.driver, timeout).until(  # presence_of_element_located
@@ -262,9 +276,8 @@ class WhapBot(object):
                 raise RuntimeError("Number of retries exceeded")
             self.retry(self.send, phone, message, retries=retries - 1)
 
+    @login_required
     def open_chat_by_phone(self, phone, retries=5):
-        if not self.is_logged:
-            self.log()
         self.get(url=f"{self._URL}send?phone={phone}")
         try:
             WebDriverWait(self.driver, 20).until(
@@ -275,6 +288,7 @@ class WhapBot(object):
                 raise RuntimeError(f"Number of retries exceeded: {e}")
             self.retry(self.open_chat_by_phone, phone, retries - 1)
 
+    @login_required
     def get_last_message(self, phone, retries=5):
         self.open_chat_by_phone(phone)
         try:
@@ -286,6 +300,7 @@ class WhapBot(object):
                 raise RuntimeError(f"Number of retries exceeded: {e}")
             self.retry(self.get_last_message, phone, retries - 1)
 
+    @login_required
     def get_last_message_status(self, retries=5):
         try:
             last_msg = self.driver.find_element_by_xpath(f'{self.XPATH_SELECTORS["message_check"]}')
@@ -295,6 +310,7 @@ class WhapBot(object):
                 raise RuntimeError(f"Cannot get last message status: {e}")
             self.retry(self.check_message_is_sent, retries - 1)
 
+    @login_required
     def check_message_is_sent(self):
         return True if self.get_last_message_status() != "Pendiente" else False
 
