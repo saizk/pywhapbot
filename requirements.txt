@@ -1,2 +1,1 @@
-selenium~=3.141.0
-msedge-selenium-tools~=3.141.3
+auto-selenium>=1.0.0

@@ -1,106 +1,56 @@
 import os
+import shutil
 import time
 import json
-import shutil
-from sys import platform
-from pathlib import Path
 from urllib.parse import quote
 
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.remote.command import Command
 from selenium.webdriver.support.ui import WebDriverWait
-
-from selenium.webdriver import Chrome, Firefox, Opera, Remote
-from msedge.selenium_tools import Edge
 
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, \
-                                       ElementNotInteractableException, UnexpectedAlertPresentException, \
-                                       WebDriverException, SessionNotCreatedException, \
-                                       NoSuchWindowException, InvalidSessionIdException
+                                       ElementNotInteractableException, UnexpectedAlertPresentException
+
+from autoselenium.driver import Driver
 
 
-class WhapBot(object):
+class WhapBot(Driver):
     _URL = "https://web.whatsapp.com/"
-    _LOCAL_STORAGE = "whatsapp_cookies.json"
-    XPATH_SELECTORS = {
+    _LOCAL_STORAGE = 'whatsapp_cookies.json'
+    XPATH_SELECTORS = {  # THESE PATHS ARE SUBJECT TO CHANGE!!
         "send_button": '//*[@id="main"]/footer/div[1]/div[3]/button',
         "all_messages": '//*[@role="region"]',
         "last_message": '//*[@role="region"]/div[last()]',
-        "message_check": '//*[@role="region"]/div[last()]/div/div/div/div[2]/div/div/span'
+        "message_check": '//*[@data-testid="msg-dblcheck"]|//*[@data-testid="msg-time"]'
     }
     CSS_SELECTORS = {
         "main_page": '.two',
         "qr_code": 'canvas',
         "chat_bar": 'div.input',
+        "message_meta": 'div[data-testid="msg-meta"]',
         "qr_reloader": 'div[data-ref] > span > div'
     }
-    _BRAVE_PATHS = {
-        "win32": "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe",
-        "linux": "/opt/brave.com/brave/brave-browser",
-        "darwin": "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+    STATUS = {
+        'pending': ['pending', 'pendiente'],
+        'read': ['read', 'leído'],
+        'received': ['received', 'entregado']
     }
 
-    def __init__(self, browser: str, driver_path: str = "", profile_path: str = "", brave_path: str = "",
-                 headless: bool = False, kiosk: bool = False, proxy: str = None, command_executor: str = None):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-        self.browser = browser.lower()
-        self.headless = headless
-        self.kiosk = kiosk
-
-        self.proxy = proxy
-        self.command_executor = command_executor
-
-        if not driver_path:
-            from .install import download_driver
-            from .utils import search_driver
-            download_driver(self.browser)
-            driver_path = search_driver(browser=self.browser)
-        self._driver_path = Path(driver_path).absolute()
-
-        if not profile_path:
-            profile_path = Path(f"{self._driver_path.parent}/{self.browser}-profile").absolute()
-        self._profile_path = Path(profile_path).absolute()
-
-        self._whatsapp_cookies = Path(f"{self._profile_path}/{self._LOCAL_STORAGE}")
-        self._logged = True if self._whatsapp_cookies.exists() else False
-
-        if brave_path:
-            self.brave_path = Path(brave_path).absolute()
-        else:
-            self.brave_path = self._BRAVE_PATHS[platform]
-
-        try:
-            self._options = self._create_options()
-            self._driver = self._create_selenium_driver()
-        except OSError as e:
-            raise RuntimeError(f"Incorrect executable path for {self.browser} driver: {e}")
-        except SessionNotCreatedException:
-            raise RuntimeError(f"Cannot create {self.browser} process with the current driver.\n"
-                               f"Update your browser to the latest version or download the specific driver")
+        self._cookies_path = f'{self.profile_path}/{self._LOCAL_STORAGE}'
+        self._logged = True if os.path.exists(self._cookies_path) else False
 
     def __enter__(self):
+        if self.browser == 'firefox':
+            self._load_profile()
         return self
 
     def __exit__(self, *args):
-        self.quit()
-
-    @property
-    def driver(self):
-        return self._driver
-
-    @driver.setter
-    def driver(self, driver):
-        self._driver = driver
-
-    @property
-    def options(self):
-        return self._options
-
-    @options.setter
-    def options(self, options):
-        self._options = options
+        self._save_profile()
+        # self._save_local_storage()
+        return self.quit()
 
     @property
     def is_logged(self):
@@ -114,104 +64,24 @@ class WhapBot(object):
 
         return logged_checker
 
-    def _create_selenium_driver(self):
-
-        if self.command_executor:  # remote driver
-            driver = Remote(command_executor=self.command_executor, options=self._options)
-
-        elif self.browser in ["chrome", "brave"]:
-            driver = Chrome(executable_path=self._driver_path, options=self._options)
-
-        elif self.browser == "opera":
-            driver = Opera(executable_path=self._driver_path, options=self._options)
-
-        elif self.browser == "edge":
-            driver = Edge(executable_path=self._driver_path, options=self._options)
-
-        elif self.browser == "firefox":
-            from selenium.webdriver.firefox.options import FirefoxProfile
-
-            if self._profile_path.exists():
-                profile = FirefoxProfile(self._profile_path)
-            else:
-                profile = FirefoxProfile()
-
-            driver = Firefox(
-                executable_path=self._driver_path,
-                options=self._options,
-                firefox_profile=profile,
-                service_log_path=Path(f"{self._driver_path.parent}/geckodriver.log")
-            )
-        else:
-            raise RuntimeError(f"Cannot load Selenium driver for {self.browser}")
-
-        # self.maximize_window()
-        return driver
-
-    def _create_options(self):
-
-        if self.browser in ["chrome", "brave"]:
-            from selenium.webdriver.chrome.options import Options as ChromeOptions
-            options = ChromeOptions()
-            if self.browser == "brave":
-                options.binary_location = self.brave_path
-
-        elif self.browser == "firefox":
-            from selenium.webdriver.firefox.options import Options as FirefoxOptions
-            options = FirefoxOptions()
-            options.set_preference('dom.webnotifications.enabled', False)
-
-        elif self.browser == "opera":
-            from selenium.webdriver.opera.options import Options as OperaOptions
-            options = OperaOptions()
-
-        elif self.browser == "edge":
-            from msedge.selenium_tools import EdgeOptions
-            options = EdgeOptions()
-            options.use_chromium = True
-        else:
-            raise RuntimeError(f"Unknown browser {self.browser}")
-
-        options.headless = self.headless
-        if self.kiosk:  # not supported on opera driver
-            options.add_argument("--kiosk")
-
-        if self.browser != "firefox":
-            options.add_argument(f"user-data-dir={self._profile_path}")
-            options.add_argument("--disable-notifications")
-
-        if self.proxy is not None:
-            self._set_proxy(options)
-
-        return options
-
-    def _set_proxy(self, options):
-        if self.browser == "firefox":
-            proxy_address, proxy_port = self.proxy.split(":")
-            options.set_preference("network.proxy.type", 1)
-            options.set_preference("network.proxy.http", proxy_address)
-            options.set_preference("network.proxy.http_port", int(proxy_port))
-            options.set_preference("network.proxy.ssl", proxy_address)
-            options.set_preference("network.proxy.ssl_port", int(proxy_port))
-        else:
-            options.add_argument(f"--proxy-server={self.proxy}")
-
-    def load_profile(self):
-        local_storage_file = os.path.join(self.driver.profile.path, self._whatsapp_cookies)
-        if Path(local_storage_file).exists():
+    def _load_profile(self):
+        if not os.path.exists(self._cookies_path):
+            return
+        local_storage_file = os.path.join(self.driver.profile.path, self._cookies_path)
+        if os.path.exists(local_storage_file):
             with open(local_storage_file) as f:
                 data = json.loads(f.read())
-                self.driver.execute_script("".join(
+                self.driver.execute_script(''.join(
                     [f'window.localStorage.setItem(\'{k}\', \'{v}\'); '
                      for k, v in data.items()])
                 )
             self.refresh()
 
-    def save_profile(self, remove_old=False):
-        if self._profile_path.exists():
+    def _save_profile(self, remove_old=False):
+        if self.profile_path.exists():
             return
-        driver_profile, local_path = self.driver.profile.path, self._profile_path
-        ignore_rule = shutil.ignore_patterns("parent.lock", "lock", ".parentlock")
+        driver_profile, local_path = self.driver.profile.path, self.profile_path
+        ignore_rule = shutil.ignore_patterns('parent.lock', 'lock', '.parentlock')
         os.mkdir(local_path)
         if remove_old:
             try:
@@ -224,7 +94,7 @@ class WhapBot(object):
             )
         else:
             for item in os.listdir(driver_profile):
-                if item in ["parent.lock", "lock", ".parentlock"]:
+                if item in ['parent.lock', 'lock', '.parentlock']:
                     continue
                 src, dst = os.path.join(driver_profile, item), local_path
                 if os.path.isdir(src):
@@ -233,45 +103,39 @@ class WhapBot(object):
                 else:
                     shutil.copy2(src, dst)
 
-    def save_local_storage(self):
-        with open(self._whatsapp_cookies, "w+") as f:
-            f.write(json.dumps(self.driver.execute_script("return window.localStorage;")))  # get local storage
-
-    def get(self, url):
-        self.driver.get(url)
+    def _save_local_storage(self):
+        if self.browser == 'firefox':
+            return
+        with open(self._cookies_path, 'w+') as f:
+            f.write(json.dumps(self.driver.execute_script('return window.localStorage;')))  # get local storage
 
     def log(self, url=_URL, timeout=15, retries=0):
         self.get(url)
-
-        if self.browser == "firefox":
-            self.load_profile()
 
         while not self.is_logged:
             try:
                 WebDriverWait(self.driver, timeout).until(EC.presence_of_element_located(
                     (By.CSS_SELECTOR, f'{self.CSS_SELECTORS["main_page"]}, {self.CSS_SELECTORS["qr_code"]}')))
-                self.driver.find_element_by_css_selector(self.CSS_SELECTORS["main_page"])
                 self._logged = True
+                self._save_local_storage() if self.browser != 'firefox' else None
             except NoSuchElementException:
                 self._logged = False
             except (UnexpectedAlertPresentException, TimeoutException) as e:
-                if retries == 0:
+                if not retries:
                     raise RuntimeError(f"Number of retries exceeded: {e}")
                 self.retry(self.log, url, retries=retries - 1)
 
-        self.save_profile()
-        self.save_local_storage()
-
     @login_required
-    def send(self, phone, message, timeout=15, retries=5):
+    def send(self, phone, message, retries=5):
         try:
             self.get(url=f"{self._URL}send?phone={phone}&text={quote(message)}")
-            send_button = WebDriverWait(self.driver, timeout).until(  # presence_of_element_located
-                EC.element_to_be_clickable((By.XPATH, self.XPATH_SELECTORS["send_button"]))).click()
-            while not self.check_message_is_sent():
-                time.sleep(.5)  # Used to avoid most of the exceptions
+            self.click_send_button()
+            while not self.check_message_is_sent(message):
+                self.click_send_button()
+                time.sleep(1)  # Used to avoid most of the exceptions
+
         except (ElementNotInteractableException, UnexpectedAlertPresentException, TimeoutException) as e:
-            if retries == 0:
+            if not retries:
                 raise RuntimeError(f"Number of retries exceeded: {e}")
             self.retry(self.send, phone, message, retries=retries - 1)
 
@@ -283,62 +147,58 @@ class WhapBot(object):
                 EC.visibility_of_element_located((By.XPATH, self.XPATH_SELECTORS["all_messages"]))
             )
         except TimeoutException as e:
-            if retries == 0:
+            if not retries:
                 raise RuntimeError(f"Number of retries exceeded: {e}")
             self.retry(self.open_chat_by_phone, phone, retries - 1)
 
     @login_required
-    def get_last_message(self, phone, retries=5):
-        self.open_chat_by_phone(phone)
+    def click_send_button(self, retries=5):
         try:
-            return self.driver.find_element_by_xpath(self.XPATH_SELECTORS["last_message"]).text
+            send_button = self.driver.find_elements_by_tag_name('button')[-1]
+            if send_button:
+                send_button.click()
 
-        except NoSuchElementException as e:
-            if retries == 0:
-                raise RuntimeError(f"Number of retries exceeded: {e}")
-            self.retry(self.get_last_message, phone, retries - 1)
+        except (NoSuchElementException, IndexError) as e:
+            if not retries:
+                raise RuntimeError(f"Cannot get last message status: {e}")
+            self.retry(self.click_send_button, retries - 1)
 
     @login_required
-    def get_last_message_status(self, retries=5):
+    def check_message_is_sent(self, message):
+        _, text = self.get_last_message()
+        status = self.get_last_message_status()
+
+        if text == message and status not in self.STATUS['pending']:
+            return True
+        return False
+
+    @login_required
+    def get_last_message_status(self, retries=10):
         try:
-            last_msg = self.driver.find_element_by_xpath(f'{self.XPATH_SELECTORS["message_check"]}')
-            status = last_msg.get_attribute("aria-label").strip()
+            last_msg, _ = self.get_last_message()
+            msg_meta = last_msg.find_element_by_css_selector(self.CSS_SELECTORS['message_meta'])
+            last_msg = msg_meta.find_element_by_xpath(self.XPATH_SELECTORS['message_check'])
+            status = last_msg.get_attribute("aria-label").strip().lower()
             return status
 
-        except NoSuchElementException as e:
-            if retries == 0:
+        except (NoSuchElementException, IndexError) as e:
+            if not retries:
                 raise RuntimeError(f"Cannot get last message status: {e}")
-            self.retry(self.check_message_is_sent, retries - 1)
+            self.retry(self.get_last_message_status, retries - 1)
 
     @login_required
-    def check_message_is_sent(self):
-        return True if self.get_last_message_status() != "Pendiente" else False
+    def get_last_message(self, retries=20):
+        try:
+            last_msg = WebDriverWait(self.driver, 100).until(
+                EC.visibility_of_element_located((By.XPATH, self.XPATH_SELECTORS["last_message"]))
+            )
+            text = str(last_msg.text.split('\n')[0])
+            return last_msg, text
 
-    @staticmethod
-    def retry(func, *args, **kwargs):
-        time.sleep(.5)
-        func(*args, **kwargs)
-
-    def add_css_selectors(self, selectors: dict):
-        self.CSS_SELECTORS.update(selectors)
-
-    def add_xpath_selectors(self, selectors: dict):
-        self.XPATH_SELECTORS.update(selectors)
-
-    def maximize_window(self):
-        self.driver.maximize_window()
-
-    def refresh(self):
-        self.driver.refresh()
+        except NoSuchElementException as e:
+            if not retries:
+                raise RuntimeError(f"Number of retries exceeded: {e}")
+            self.retry(self.get_last_message, retries - 1)
 
     def reload_qr(self):
         self.driver.find_element_by_css_selector(self.CSS_SELECTORS["qr_reloader"]).click()
-
-    def close(self):
-        self.driver.close()
-
-    def quit(self):
-        self.driver.quit()
-
-    def screenshot(self, filename):
-        self.driver.save_screenshot(filename)

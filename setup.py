@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="pywhapbot",
-    version="1.0.2",
+    version="1.1",
     author="saizk",
     author_email="sergioaizcorbe@hotmail.com",
     description="WhatsApp Web API Wrapper for Chrome, Firefox, Opera, Brave and Edge.",
@@ -23,7 +23,7 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    install_requires=['selenium~=3.141.0', 'msedge-selenium-tools~=3.141.3'],
+    install_requires=['auto-selenium>=1.0.0'],
     package_dir={".": ""},
     packages=["pywhapbot"],
     include_package_data=True,

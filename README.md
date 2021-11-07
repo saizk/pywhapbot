@@ -14,32 +14,21 @@ pip install pywhapbot
 + Store WhatsApp Web sessions in all the browsers. (Edge only available on Windows)
 
 ## Simple Usage
+
 ```Python
-from pywhapbot import WhapBot
+from whapbot import WhapBot
 
-bot = WhapBot("chrome")  # downloads current driver automatically
-bot.log()  # optional
-bot.send("+34123456789", "Hello world!")  # forces log
-bot.quit()
-```
+from autoselenium import Driver
 
-## Download specific drivers automatically
-```Python
-from pywhapbot.install import download_driver
-from pywhapbot.utils import get_version
+with WhapBot('chrome', root='drivers') as bot:
+    bot.set_window_position(420, 420)
+    bot.send("+34123456789", "Hello world!")
+    bot.refresh()
 
-download_driver("firefox", version="0.29.1", root="drivers")
-download_driver("opera", version="latest")
-download_driver("edge", version="current")
-
-lversion = get_version("brave", "latest")
-cversion = get_version("brave", "current")
-
-if cversion < lversion:
-    print("You should update your browser!")
 ```
 
 ## More advanced example
+
 ```Python
 import time
 from pywhapbot import WhapBot
@@ -55,22 +44,17 @@ whapmsgs = [("+34696969420", "Open!"),
             ("+34696942069", "Source!")]
 
 with whapbot as bot:
-    bot.get("https://github.com/saizk")
-    # Selenium Webdriver command examples
-    bot.driver.set_window_position(210, 210)
-    bot.driver.find_element_by_link_text("new window").click()
-    bot.driver.switch_to.new_window('tab')
-    
+
     for idx, (phone, message) in enumerate(whapmsgs):
         bot.send(phone, message, timeout=15, retries=5)  # forces log
         bot.screenshot(f"whapbot-{idx}.png")
-        print(f"{idx+1}/{len(whapmsgs)} messages sent")   
-    
+        print(f"{idx + 1}/{len(whapmsgs)} messages sent")
+
     time.sleep(120)
-    
+
     for phone, message in whapmsgs:
         bot.open_chat_by_phone(phone)
-        if bot.get_last_message_status() not in ["Read", "Leido"]:
+        if bot.get_last_message_status() not in ["Read", "Leído"]:
             bot.send(message)
 ```
 
@@ -80,5 +64,3 @@ Would you like to contribute to this project? Here are a few starters:
 - Add Testing examples
 - Bug hunts and refactor
 - Additional features/ More integrations
-- Phantom JS support
-- Implement default browser functions for Mac 
